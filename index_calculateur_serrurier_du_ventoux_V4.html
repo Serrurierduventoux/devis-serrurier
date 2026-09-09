@@ -1,0 +1,170 @@
+<!doctype html>
+<html lang="fr">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<title>Estimation — Serrurier du Ventoux</title>
+<style>
+:root{--beige:#F9E7D4;--blue:#123B5D;--gold:#B08D57;--dark:#183044;--zone1:#A8B85C;--zone2:#7AA37A;--zone3:#D3A84C;--zone4:#C9824F;--zone5:#A95858}
+*{box-sizing:border-box}body{margin:0;font-family:Arial,sans-serif;background:var(--beige);color:var(--dark)}
+.card{max-width:720px;margin:30px auto;padding:28px;background:#fffaf4;border-radius:18px;box-shadow:0 8px 30px #123b5d18}
+h1{margin:0 0 8px;color:var(--blue);font-size:28px}.intro{margin:0 0 24px;color:#52616d}
+label{display:block;font-weight:700;color:var(--blue);margin:18px 0 8px}
+.zone-grid{display:grid;grid-template-columns:repeat(5,1fr);gap:8px}
+.zone{border:2px solid transparent;border-radius:12px;padding:13px 6px;background:white;cursor:pointer;text-align:center;font-weight:700;color:white;min-height:65px}
+.zone small{display:block;font-weight:400;margin-top:4px}
+.zone.selected{border-color:var(--blue);box-shadow:0 0 0 3px #123b5d22}
+.z1{background:#7AA34A}.z2{background:#168CC7}.z3{background:var(--zone3)}.z4{background:var(--zone4)}.z5{background:var(--zone5)}
+.map{width:100%;margin-top:12px;border-radius:12px;display:block}
+select{width:100%;padding:13px;border:1px solid #d9c6ad;border-radius:10px;background:white;font-size:16px}
+.result{margin-top:25px;padding:22px;border-radius:14px;background:var(--blue);color:white;text-align:center}
+.result small{display:block;opacity:.8;margin-bottom:6px}.price{font-size:38px;font-weight:800;color:#f4d6a4}
+.note{font-size:13px;line-height:1.45;margin-top:12px;opacity:.9}
+button{width:100%;margin-top:18px;padding:14px;border:0;border-radius:10px;background:var(--gold);color:white;font-size:16px;font-weight:700;cursor:pointer}
+@media(max-width:560px){.zone-grid{grid-template-columns:repeat(2,1fr)}}
+</style>
+</head>
+<body>
+<div class="card">
+<h1>Estimez votre intervention</h1>
+<p class="intro">Sélectionnez votre zone et les conditions d'intervention.</p>
+
+<label>📍 Zone d'intervention</label>
+<div class="zone-grid" id="zones">
+  <button type="button" class="zone z1 selected" data-value="25">ZONE 1</button>
+  <button type="button" class="zone z2" data-value="33">ZONE 2</button>
+  <button type="button" class="zone z3" data-value="41">ZONE 3</button>
+  <button type="button" class="zone z4" data-value="52">ZONE 4</button>
+  <button type="button" class="zone z5" data-value="73">ZONE 5</button>
+</div>
+
+<img class="map" src="data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAABbIAAAQ7CAYAAABaLVgpAAAQAElEQVR4Aey9B2BmR3ku/MypX1Xvq+3rXfdewWBssMH0zoULKdybctP+hCQkuemUFCCB0EICuUDoGFww4G6wjQ1u67Zrb69a9a6vnjb/855P2pW0klbalbaYPTpzztR33pkz8847z4zmM8pjHTq/+Xs6ePyftX7iI1PM2NNf14P7n9SDvVsOmv6nb9FjT39BB53/rfXgt2NTePYzenDjN/XAtLiT081m377lSf3gg/frLc8/ofu6XziYz2zxZ/Mf6tuqCyN7dZnlETM2tEuL32zxp/uPDGzXxZF9B9MLjdOm47D6GO7dpUuFMZ0bG9X5ka7Dwn9Z6mxscOecbTU/vDuumyLb5eiz39e5p/5dBwe+qif6TLD/K3rsyc/qwadvOqyPTaSdrS7zw3umtPXZ4p0I/9GBuetler+b7M4PVeosN7hL9xx4gW1sUOfzObaz7rguT0R5TpY8N3UN6Tt2lvSt28r6tu0lfceukr5zFvPDnWX94N687hroXVC9efluHfpF/fjjj+s
+
+    // Géolocalisation automatique à l'ouverture
+    const baseAddress = "154 Avenue Saint-Roch, 84200 Carpentras";
+
+    function setGeoStatus(message, ok=false){
+      let el = document.getElementById('geoStatus');
+      if(!el){
+        el = document.createElement('div');
+        el.id = 'geoStatus';
+        el.style.cssText = 'margin-top:10px;font-size:13px;line-height:1.45;color:#555;';
+        const zoneButtons = document.querySelector('.zones');
+        if(zoneButtons) zoneButtons.insertAdjacentElement('afterend', el);
+      }
+      el.textContent = message;
+      el.style.color = ok ? '#2f6f4e' : '#666';
+    }
+
+    function zoneFromMinutes(minutes){
+      if(minutes < 10) return 1;
+      if(minutes < 15) return 2;
+      if(minutes < 20) return 3;
+      if(minutes < 25) return 4;
+      return 5;
+    }
+
+    async function autoDetectZone(position){
+      try{
+        const lat = position.coords.latitude;
+        const lon = position.coords.longitude;
+
+        setGeoStatus("Localisation détectée, calcul du temps de trajet…");
+
+        let addressText = "position détectée";
+        try{
+          const reverse = await fetch(
+            `https://nominatim.openstreetmap.org/reverse?format=jsonv2&lat=${encodeURIComponent(lat)}&lon=${encodeURIComponent(lon)}&zoom=18&addressdetails=1`
+          );
+          if(reverse.ok){
+            const data = await reverse.json();
+            if(data && data.display_name) addressText = data.display_name;
+          }
+        }catch(e){}
+
+        const baseSearch = await fetch(
+          `https://nominatim.openstreetmap.org/search?format=jsonv2&limit=1&countrycodes=fr&q=${encodeURIComponent(baseAddress)}`
+        );
+        if(!baseSearch.ok) throw new Error("Adresse de départ introuvable.");
+        const baseData = await baseSearch.json();
+        if(!baseData.length) throw new Error("Adresse de départ introuvable.");
+
+        const baseLat = parseFloat(baseData[0].lat);
+        const baseLon = parseFloat(baseData[0].lon);
+
+        const route = await fetch(
+          `https://router.project-osrm.org/route/v1/driving/${baseLon},${baseLat};${lon},${lat}?overview=false`
+        );
+        if(!route.ok) throw new Error("Calcul du trajet impossible.");
+
+        const routeData = await route.json();
+        if(!routeData.routes || !routeData.routes.length) throw new Error("Aucun trajet trouvé.");
+
+        const minutes = Math.round(routeData.routes[0].duration / 60);
+        const detectedZone = zoneFromMinutes(minutes);
+
+        const zoneButton = document.querySelector(`.zone[data-zone="${detectedZone}"]`);
+        if(zoneButton) zoneButton.click();
+
+        setGeoStatus(
+          `Adresse détectée : ${addressText} — Temps de trajet estimé : ${minutes} min → Zone ${detectedZone}.`,
+          true
+        );
+      }catch(error){
+        setGeoStatus("Localisation automatique indisponible. Vous pouvez sélectionner votre zone manuellement.");
+      }
+    }
+
+    function requestAutomaticLocation(){
+      if(!navigator.geolocation){
+        setGeoStatus("La géolocalisation n’est pas disponible sur cet appareil. Vous pouvez sélectionner votre zone manuellement.");
+        return;
+      }
+
+      setGeoStatus("Détection de votre position…");
+
+      navigator.geolocation.getCurrentPosition(
+        autoDetectZone,
+        function(){
+          setGeoStatus("Autorisation de localisation refusée ou indisponible. Vous pouvez sélectionner votre zone manuellement.");
+        },
+        {
+          enableHighAccuracy: true,
+          timeout: 10000,
+          maximumAge: 300000
+        }
+      );
+    }
+
+    window.addEventListener('load', requestAutomaticLocation);
+//nominatim.openstreetmap.org/search?format=jsonv2&limit=1&countrycodes=fr&q="+encodeURIComponent(BASE_ADDRESS);
+        const gr=await fetch(geocode,{headers:{Accept:"application/json"}});
+        if(!gr.ok) throw new Error("geocode");
+        const gd=await gr.json();
+        if(!gd.length) throw new Error("base");
+        const baseLat=Number(gd[0].lat),baseLon=Number(gd[0].lon);
+        info.textContent="Position détectée. Calcul du temps de trajet routier…";
+        const route=`https://router.project-osrm.org/route/v1/driving/${baseLon},${baseLat};${lon},${lat}?overview=false`;
+        const rr=await fetch(route);
+        if(!rr.ok) throw new Error("route");
+        const rd=await rr.json();
+        if(!rd.routes||!rd.routes.length) throw new Error("noroute");
+        const minutes=rd.routes[0].duration/60;
+        const z=minutes<10?1:minutes<15?2:minutes<20?3:minutes<25?4:5;
+        selectZone(z);
+        info.innerHTML=`Temps de trajet estimé depuis Carpentras : <strong>${Math.round(minutes)} min</strong> → <strong>ZONE ${z}</strong><br><span>Vous pouvez modifier la zone manuellement.</span>`;
+      }catch(e){
+        console.error(e);
+        info.textContent="Impossible de calculer automatiquement le trajet. Vous pouvez choisir votre zone manuellement.";
+      }
+    },err=>{
+      info.textContent=err.code===1?"Autorisation de localisation refusée. Vous pouvez choisir votre zone manuellement.":"Impossible de déterminer votre position. Vous pouvez choisir votre zone manuellement.";
+    },{enableHighAccuracy:true,timeout:15000,maximumAge:300000});
+  });
+}
+
+autoFillNow();
+addGeolocation();
+</script>
+</body>
+</html>
